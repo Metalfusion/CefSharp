@@ -428,6 +428,63 @@ namespace CefSharp.Internals
                     var jsMethod = CreateJavaScriptMethod(methodInfo, camelCaseJavascriptNames);
                     obj.Methods.Add(jsMethod);
                 }
+
+                // Allow calling properties of ExpandoObject that have a delegate value type e.g. Func<string, bool>
+                if (type == typeof(System.Dynamic.ExpandoObject)) 
+                {
+
+                    var expando = obj.Value as System.Dynamic.ExpandoObject;
+                    var memberDict = (IDictionary<string, object>)expando;
+
+                    foreach (var pair in memberDict.Where(p => p.Value is Delegate &&
+                                                               !obj.Methods.Any(m => m.ManagedName == p.Key)))
+                    {
+                        string propertyName = pair.Key;
+                        Delegate methodDelegate = (Delegate)pair.Value;
+                        var methodInfo = methodDelegate.Method;
+
+                        // Need to use the property name in the parent object, not the name of the method the delegate points to.
+                        var jsMethod = CreateJavaScriptMethod(methodInfo, camelCaseJavascriptNames, propertyName);
+
+                        // Allow the delegate (value of the property) to have changed and call the current delegate.
+                        jsMethod.Function = (parentObject, args) => 
+                        {
+                            var currentMemberDict = (IDictionary<string, object>)parentObject;
+                            var currentDelegate = (Delegate)currentMemberDict[jsMethod.ManagedName];
+                            return currentDelegate.DynamicInvoke(args);
+                        };
+
+                        obj.Methods.Add(jsMethod);
+                    }
+                }
+
+                // Allow calling any non-dynamic properties that have a delegate value type e.g. Func<string, bool>
+                foreach (var propertyInfo in type.GetProperties(BindingFlags.Instance | BindingFlags.Public).Where(p => !p.IsSpecialName)) 
+                {
+                    
+                    var hasIgnoreAttribute = Attribute.IsDefined(propertyInfo, typeof(JavascriptIgnoreAttribute));
+                    if (!typeof(Delegate).IsAssignableFrom(propertyInfo.PropertyType) || hasIgnoreAttribute || !propertyInfo.CanRead) 
+                    {
+                        continue;
+                    }
+
+                    // This doesn't require the property to be set before registration.
+                    // Compiler generates an Invoke method of correct form automatically.
+                    var methodInfo = propertyInfo.PropertyType.GetMethod("Invoke");
+
+                    // Need to use the property name in the parent object, not the name of the method the delegate points to.
+                    var jsMethod = CreateJavaScriptMethod(methodInfo, camelCaseJavascriptNames, propertyInfo.Name);
+
+                    // Allow the delegate (value of the property) to have changed and call the current delegate.
+                    jsMethod.Function = (parentObject, args) => 
+                    {
+                        var currentDelegate = (Delegate)propertyInfo.GetValue(parentObject);
+                        return currentDelegate.DynamicInvoke(args);
+                    };
+
+                    obj.Methods.Add(jsMethod);
+                }
+
             }
 
             if (analyseProperties)
@@ -469,12 +526,12 @@ namespace CefSharp.Internals
             ResolveObject?.Invoke(this, new JavascriptBindingEventArgs(this, name));
         }
 
-        private static JavascriptMethod CreateJavaScriptMethod(MethodInfo methodInfo, bool camelCaseJavascriptNames)
+        private static JavascriptMethod CreateJavaScriptMethod(MethodInfo methodInfo, bool camelCaseJavascriptNames, string managedName = null)
         {
             var jsMethod = new JavascriptMethod();
 
-            jsMethod.ManagedName = methodInfo.Name;
-            jsMethod.JavascriptName = GetJavascriptName(methodInfo.Name, camelCaseJavascriptNames);
+            jsMethod.ManagedName = managedName ?? methodInfo.Name;
+            jsMethod.JavascriptName = GetJavascriptName(jsMethod.ManagedName, camelCaseJavascriptNames);
             jsMethod.Function = methodInfo.Invoke;
             jsMethod.ParameterCount = methodInfo.GetParameters().Length;
             jsMethod.Parameters = methodInfo.GetParameters()
