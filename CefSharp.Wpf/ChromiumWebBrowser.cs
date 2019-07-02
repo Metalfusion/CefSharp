@@ -556,7 +556,7 @@ namespace CefSharp.Wpf
             UndoCommand = new DelegateCommand(this.Undo);
             RedoCommand = new DelegateCommand(this.Redo);
 
-            managedCefBrowserAdapter = new ManagedCefBrowserAdapter(this, true);
+            managedCefBrowserAdapter = new ManagedCefBrowserAdapter(this, true, null);
 
             ResourceHandlerFactory = new DefaultResourceHandlerFactory();
             browserSettings = new BrowserSettings(frameworkCreated: true);

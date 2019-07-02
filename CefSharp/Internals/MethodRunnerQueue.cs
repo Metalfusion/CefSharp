@@ -17,12 +17,14 @@ namespace CefSharp.Internals
         private readonly object lockObject = new object();
         private volatile CancellationTokenSource cancellationTokenSource;
         private volatile bool running;
+        private readonly TaskScheduler taskScheduler;
 
         public event EventHandler<MethodInvocationCompleteArgs> MethodInvocationComplete;
 
-        public MethodRunnerQueue(JavascriptObjectRepository repository)
+        public MethodRunnerQueue(JavascriptObjectRepository repository, TaskScheduler taskScheduler)
         {
             this.repository = repository;
+            this.taskScheduler = taskScheduler;
         }
 
         public void Start()
@@ -68,7 +70,7 @@ namespace CefSharp.Internals
             try
             {
 
-                if (CefSharpSettings.ConcurrentTaskExecution)
+                if (CefSharpSettings.ConcurrentTaskExecution || (taskScheduler != null && taskScheduler != TaskScheduler.Default))
                 {
                     //New experimental behaviour that Starts the Tasks on TaskScheduler.Default 
                     while (!cancellationTokenSource.IsCancellationRequested)
@@ -78,7 +80,7 @@ namespace CefSharp.Internals
                         {
                             OnMethodInvocationComplete(t.Result);
                         }, cancellationTokenSource.Token);
-                        task.Start(TaskScheduler.Default);
+                        task.Start(taskScheduler ?? TaskScheduler.Default);
                     }
                 }
                 else

@@ -448,7 +448,7 @@ namespace CefSharp.WinForms
                     browserSettings = new BrowserSettings(frameworkCreated: true);
                 }
 
-                managedCefBrowserAdapter = new ManagedCefBrowserAdapter(this, false);
+                managedCefBrowserAdapter = new ManagedCefBrowserAdapter(this, false, null);
 
                 initialized = true;
             }

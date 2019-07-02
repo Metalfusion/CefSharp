@@ -286,6 +286,11 @@ namespace CefSharp.OffScreen
         public bool CanExecuteJavascriptInMainFrame { get; private set; }
 
         /// <summary>
+        /// Task scheduler used to execute JavaScript callbacks.
+        /// </summary>
+        public TaskScheduler Scheduler { get; private set; }
+
+        /// <summary>
         /// Create a new OffScreen Chromium Browser. If you use <see cref="CefSharpSettings.LegacyJavascriptBindingEnabled"/> = true then you must
         /// set <paramref name="automaticallyCreateBrowser"/> to false and call <see cref="CreateBrowser"/> after the objects are registered.
         /// </summary>
@@ -295,7 +300,7 @@ namespace CefSharp.OffScreen
         /// <param name="automaticallyCreateBrowser">automatically create the underlying Browser</param>
         /// <exception cref="System.InvalidOperationException">Cef::Initialize() failed</exception>
         public ChromiumWebBrowser(string address = "", BrowserSettings browserSettings = null,
-            RequestContext requestContext = null, bool automaticallyCreateBrowser = true)
+            RequestContext requestContext = null, bool automaticallyCreateBrowser = true, TaskScheduler taskScheduler = null)
         {
             if (!Cef.IsInitialized)
             {
@@ -309,11 +314,12 @@ namespace CefSharp.OffScreen
 
             ResourceHandlerFactory = new DefaultResourceHandlerFactory();
             RequestContext = requestContext;
+            Scheduler = taskScheduler ?? TaskScheduler.Default;
 
             Cef.AddDisposable(this);
             Address = address;
 
-            managedCefBrowserAdapter = new ManagedCefBrowserAdapter(this, true);
+            managedCefBrowserAdapter = new ManagedCefBrowserAdapter(this, true, Scheduler);
 
             if (automaticallyCreateBrowser)
             {
@@ -523,14 +529,14 @@ namespace CefSharp.OffScreen
                     // Chromium has rendered.  Tell the task about it.
                     Paint -= paint;
 
-                    completionSource.TrySetResultAsync(ScreenshotOrNull(blend));
+                    completionSource.TrySetResultAsync(ScreenshotOrNull(blend), Scheduler);
                 };
 
                 Paint += paint;
             }
             else
             {
-                completionSource.TrySetResultAsync(screenshot);
+                completionSource.TrySetResultAsync(screenshot, Scheduler);
             }
 
             return completionSource.Task;

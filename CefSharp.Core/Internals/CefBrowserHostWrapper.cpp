@@ -116,7 +116,7 @@ Task<double>^ CefBrowserHostWrapper::GetZoomLevelAsync()
     {
         auto taskSource = gcnew TaskCompletionSource<double>();
 
-        CefSharp::Internals::TaskExtensions::TrySetResultAsync<double>(taskSource, GetZoomLevelOnUI());
+        CefSharp::Internals::TaskExtensions::TrySetResultAsync<double>(taskSource, GetZoomLevelOnUI(), nullptr);
         return taskSource->Task;
     }
     return Cef::UIThreadTaskFactory->StartNew(gcnew Func<double>(this, &CefBrowserHostWrapper::GetZoomLevelOnUI));

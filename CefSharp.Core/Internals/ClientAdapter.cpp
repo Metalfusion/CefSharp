@@ -1397,7 +1397,7 @@ namespace CefSharp
                         response->Message = StringUtils::ToClr(argList->GetString(2));
                     }
 
-                    CefSharp::Internals::TaskExtensions::TrySetResultAsync<JavascriptResponse^>(pendingTask, response);
+                    CefSharp::Internals::TaskExtensions::TrySetResultAsync<JavascriptResponse^>(pendingTask, response, nullptr);
                 }
 
                 handled = true;

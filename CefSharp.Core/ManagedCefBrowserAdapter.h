@@ -44,7 +44,7 @@ namespace CefSharp
         MCefRefPtr<ClientAdapter> GetClientAdapter();
 
     public:
-        ManagedCefBrowserAdapter(IWebBrowserInternal^ webBrowserInternal, bool offScreenRendering)
+        ManagedCefBrowserAdapter(IWebBrowserInternal^ webBrowserInternal, bool offScreenRendering, TaskScheduler^ taskScheduler)
             : _isDisposed(false)
         {
             if (offScreenRendering)
@@ -59,7 +59,7 @@ namespace CefSharp
             _webBrowserInternal = webBrowserInternal;
             _javaScriptObjectRepository = gcnew CefSharp::Internals::JavascriptObjectRepository();
             _javascriptCallbackFactory = gcnew CefSharp::Internals::JavascriptCallbackFactory(_clientAdapter->GetPendingTaskRepository());
-            _methodRunnerQueue = gcnew CefSharp::Internals::MethodRunnerQueue(_javaScriptObjectRepository);
+            _methodRunnerQueue = gcnew CefSharp::Internals::MethodRunnerQueue(_javaScriptObjectRepository, taskScheduler);
             _methodRunnerQueue->MethodInvocationComplete += gcnew EventHandler<MethodInvocationCompleteArgs^>(this, &ManagedCefBrowserAdapter::MethodInvocationComplete);
             _methodRunnerQueue->Start();
         }

@@ -99,10 +99,13 @@ namespace CefSharp.Internals
         /// <typeparam name="TResult">Generic param</typeparam>
         /// <param name="taskCompletionSource">tcs</param>
         /// <param name="result">result</param>
-        public static void TrySetResultAsync<TResult>(this TaskCompletionSource<TResult> taskCompletionSource, TResult result)
+        /// <param name="taskScheduler">The task scheduler to use. Null means <see cref="TaskScheduler.Default"/></param>
+        public static void TrySetResultAsync<TResult>(this TaskCompletionSource<TResult> taskCompletionSource, TResult result, TaskScheduler taskScheduler = null)
         {
-            Task.Factory.StartNew(delegate
-            { taskCompletionSource.TrySetResult(result); }, CancellationToken.None, TaskCreationOptions.None, TaskScheduler.Default);
+            Task.Factory.StartNew(delegate{ taskCompletionSource.TrySetResult(result); },
+                                  CancellationToken.None,
+                                  TaskCreationOptions.None,
+                                  taskScheduler ?? TaskScheduler.Default);
         }
     }
 }
