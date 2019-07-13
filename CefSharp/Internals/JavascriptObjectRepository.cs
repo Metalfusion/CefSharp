@@ -446,12 +446,41 @@ namespace CefSharp.Internals
                         // Need to use the property name in the parent object, not the name of the method the delegate points to.
                         var jsMethod = CreateJavaScriptMethod(methodInfo, camelCaseJavascriptNames, propertyName);
 
+                        // Support for async methods.
+                        bool methodReturnsTask = typeof(Task).IsAssignableFrom(methodInfo.ReturnType);
+                        bool taskHasReturnValue = methodReturnsTask && methodInfo.ReturnType.IsGenericType;
+                        PropertyInfo resultProperty = methodInfo.ReturnType?.GetProperty("Result", BindingFlags.Public | BindingFlags.Instance);
+
+                        if (methodReturnsTask && taskHasReturnValue) {
+                            // Async methods with return type Task actually have return type Task<VoidTaskResult> when invoked through reflection.
+                            var voidTaskType = typeof(Task<>).MakeGenericType(Type.GetType("System.Threading.Tasks.VoidTaskResult"));
+                            taskHasReturnValue = !voidTaskType.IsAssignableFrom(methodInfo.ReturnType);
+                        }
+                        
                         // Allow the delegate (value of the property) to have changed and call the current delegate.
                         jsMethod.Function = (parentObject, args) => 
                         {
+                            // TODO: The delegate return type may also have changed?
                             var currentMemberDict = (IDictionary<string, object>)parentObject;
                             var currentDelegate = (Delegate)currentMemberDict[jsMethod.ManagedName];
-                            return currentDelegate.DynamicInvoke(args);
+
+                            var callResult = currentDelegate.DynamicInvoke(args);
+                            
+                            if (callResult != null && methodReturnsTask) {
+
+                                if (taskHasReturnValue) {
+                                    // Getting the Result property from Task blocks until completion.
+                                    object resultValue = resultProperty.GetValue(callResult);
+                                    return resultValue;
+                                } else {
+                                    ((Task)callResult).Wait();
+                                    return null;
+                                }
+
+                            } else {
+
+                                return callResult;
+                            }
                         };
 
                         obj.Methods.Add(jsMethod);
