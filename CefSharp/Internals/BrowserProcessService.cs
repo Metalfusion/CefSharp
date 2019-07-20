@@ -22,12 +22,9 @@ namespace CefSharp.Internals
 
         public BrowserProcessResponse CallMethod(long objectId, string name, object[] parameters)
         {
-            object result;
-            string exception;
-
-            var success = javascriptObjectRepository.TryCallMethod(objectId, name, parameters, out result, out exception);
-
-            return new BrowserProcessResponse { Success = success, Result = result, Message = exception };
+            // TODO: This tries to do blocking call on async tasks.
+            var callResult = javascriptObjectRepository.TryCallMethod(objectId, name, parameters).Result;
+            return new BrowserProcessResponse { Success = callResult.success, Result = callResult.result, Message = callResult.exception };
         }
 
         public BrowserProcessResponse GetProperty(long objectId, string name)

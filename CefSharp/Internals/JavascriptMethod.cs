@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
+using System.Threading.Tasks;
 
 namespace CefSharp.Internals
 {
@@ -14,7 +15,7 @@ namespace CefSharp.Internals
         /// <summary>
         /// Gets or sets a delegate which is used to invoke the method if the member is a method. 
         /// </summary>
-        public Func<object, object[], object> Function { get; set; }
+        public Func<object, object[], Task<object>> Function { get; set; }
 
         /// <summary>
         /// Identifies the <see cref="JavascriptMethod" /> for BrowserProcess to RenderProcess communication

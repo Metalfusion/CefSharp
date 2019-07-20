@@ -198,14 +198,24 @@ namespace CefSharp.Internals
             return false;
         }
 
-        internal bool TryCallMethod(long objectId, string name, object[] parameters, out object result, out string exception)
+        internal struct MethodCallResult {
+            public bool success;
+            public object result;
+            public string exception;
+        }
+
+        internal async Task<MethodCallResult> TryCallMethod(long objectId, string name, object[] parameters)
         {
-            exception = "";
-            result = null;
+            var callResult = new MethodCallResult() {
+                exception = "",
+                result = null,
+                success = false
+            };
+
             JavascriptObject obj;
             if (!objects.TryGetValue(objectId, out obj))
             {
-                return false;
+                return callResult;
             }
 
             var method = obj.Methods.FirstOrDefault(p => p.JavascriptName == name);
@@ -292,11 +302,11 @@ namespace CefSharp.Internals
 
                     if (obj.MethodInterceptor == null)
                     {
-                        result = method.Function(obj.Value, parameters);
+                        callResult.result = await method.Function(obj.Value, parameters);
                     }
                     else
                     {
-                        result = obj.MethodInterceptor.Intercept(() => method.Function(obj.Value, parameters), method.ManagedName);
+                        callResult.result = obj.MethodInterceptor.Intercept(() => method.Function(obj.Value, parameters), method.ManagedName);
                     }
                 }
                 catch (Exception e)
@@ -307,31 +317,33 @@ namespace CefSharp.Internals
                 //For sync binding with methods that return a complex property we create a new JavascriptObject
                 //TODO: Fix the memory leak, every call to a method that returns an object will create a new
                 //JavascriptObject and they are never released
-                if (!obj.IsAsync && result != null && IsComplexType(result.GetType()))
+                if (!obj.IsAsync && callResult.result != null && IsComplexType(callResult.result.GetType()))
                 {
                     var jsObject = CreateJavascriptObject(obj.CamelCaseJavascriptNames);
-                    jsObject.Value = result;
+                    jsObject.Value = callResult.result;
                     jsObject.Name = "FunctionResult(" + name + ")";
                     jsObject.JavascriptName = jsObject.Name;
 
                     AnalyseObjectForBinding(jsObject, analyseMethods: false, analyseProperties: true, readPropertyValue: true, camelCaseJavascriptNames: obj.CamelCaseJavascriptNames);
 
-                    result = jsObject;
+                    callResult.result = jsObject;
                 }
 
-                return true;
+                callResult.success = true;
+                return callResult;
             }
             catch (TargetInvocationException e)
             {
                 var baseException = e.GetBaseException();
-                exception = baseException.ToString();
+                callResult.exception = baseException.ToString();
             }
             catch (Exception ex)
             {
-                exception = ex.ToString();
+                callResult.exception = ex.ToString();
             }
 
-            return false;
+            callResult.success = false;
+            return callResult;
         }
 
         internal bool TryGetProperty(long objectId, string name, out object result, out string exception)
@@ -458,7 +470,7 @@ namespace CefSharp.Internals
                         }
                         
                         // Allow the delegate (value of the property) to have changed and call the current delegate.
-                        jsMethod.Function = (parentObject, args) => 
+                        jsMethod.Function = async (parentObject, args) => 
                         {
                             // TODO: The delegate return type may also have changed?
                             var currentMemberDict = (IDictionary<string, object>)parentObject;
@@ -468,12 +480,13 @@ namespace CefSharp.Internals
                             
                             if (callResult != null && methodReturnsTask) {
 
+                                await (Task)callResult;
+
                                 if (taskHasReturnValue) {
                                     // Getting the Result property from Task blocks until completion.
                                     object resultValue = resultProperty.GetValue(callResult);
                                     return resultValue;
                                 } else {
-                                    ((Task)callResult).Wait();
                                     return null;
                                 }
 
@@ -505,7 +518,7 @@ namespace CefSharp.Internals
                     var jsMethod = CreateJavaScriptMethod(methodInfo, camelCaseJavascriptNames, propertyInfo.Name);
 
                     // Allow the delegate (value of the property) to have changed and call the current delegate.
-                    jsMethod.Function = (parentObject, args) => 
+                    jsMethod.Function = async (parentObject, args) => 
                     {
                         var currentDelegate = (Delegate)propertyInfo.GetValue(parentObject);
                         return currentDelegate.DynamicInvoke(args);
@@ -561,7 +574,10 @@ namespace CefSharp.Internals
 
             jsMethod.ManagedName = managedName ?? methodInfo.Name;
             jsMethod.JavascriptName = GetJavascriptName(jsMethod.ManagedName, camelCaseJavascriptNames);
-            jsMethod.Function = methodInfo.Invoke;
+            jsMethod.Function = async (obj, param) => {
+                return methodInfo.Invoke(obj, param);
+            };
+
             jsMethod.ParameterCount = methodInfo.GetParameters().Length;
             jsMethod.Parameters = methodInfo.GetParameters()
                 .Select(t => new MethodParameter()

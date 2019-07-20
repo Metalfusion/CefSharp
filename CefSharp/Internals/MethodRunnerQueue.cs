@@ -18,6 +18,7 @@ namespace CefSharp.Internals
         private volatile CancellationTokenSource cancellationTokenSource;
         private volatile bool running;
         private readonly TaskScheduler taskScheduler;
+        private readonly TaskFactory taskFactory;
 
         public event EventHandler<MethodInvocationCompleteArgs> MethodInvocationComplete;
 
@@ -25,6 +26,7 @@ namespace CefSharp.Internals
         {
             this.repository = repository;
             this.taskScheduler = taskScheduler;
+            taskFactory = new TaskFactory(taskScheduler ?? TaskScheduler.Default);
         }
 
         public void Start()
@@ -60,8 +62,9 @@ namespace CefSharp.Internals
         }
 
         public void Enqueue(MethodInvocation methodInvocation)
-        {
-            var task = new Task<MethodInvocationResult>(() => ExecuteMethodInvocation(methodInvocation));
+        {   
+            Task<MethodInvocationResult> task = taskFactory.StartNew(() => ExecuteMethodInvocation(methodInvocation))
+                                                           .Unwrap();
             queue.Add(task);
         }
 
@@ -80,7 +83,10 @@ namespace CefSharp.Internals
                         {
                             OnMethodInvocationComplete(t.Result);
                         }, cancellationTokenSource.Token);
-                        task.Start(taskScheduler ?? TaskScheduler.Default);
+
+                        if (task.Status == TaskStatus.Created) {
+                            task.Start(taskScheduler ?? TaskScheduler.Default);
+                        }
                     }
                 }
                 else
@@ -104,7 +110,7 @@ namespace CefSharp.Internals
             }
         }
 
-        private MethodInvocationResult ExecuteMethodInvocation(MethodInvocation methodInvocation)
+        private async Task<MethodInvocationResult> ExecuteMethodInvocation(MethodInvocation methodInvocation)
         {
             object result = null;
             string exception;
@@ -113,7 +119,10 @@ namespace CefSharp.Internals
             //make sure we don't throw exceptions in the executor task
             try
             {
-                success = repository.TryCallMethod(methodInvocation.ObjectId, methodInvocation.MethodName, methodInvocation.Parameters.ToArray(), out result, out exception);
+                var callResult = await repository.TryCallMethod(methodInvocation.ObjectId, methodInvocation.MethodName, methodInvocation.Parameters.ToArray());
+                success = callResult.success;
+                result = callResult.result;
+                exception = callResult.exception;
             }
             catch (Exception e)
             {
